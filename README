@@ -1,0 +1,18 @@
+
+==== RUN FROM COMMAND LINE ====
+
+    python miller.py input_files/test.rml
+
+==== DEPENDENCIES ====
+
+ * python 2.5
+
+ * pygame (python library) - http://www.pygame.org
+ * numpy (python library) - http://numpy.scipy.org/
+ * serial (python library)
+     http://sourceforge.net/project/showfiles.php?group_id=46487
+
+ * FTDI VCP driver (usb -> serial driver)
+     download - http://www.ftdichip.com/Drivers/VCP.htm
+     installation guide - http://www.ftdichip.com/Documents/InstallGuides.htm
+
