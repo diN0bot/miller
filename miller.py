@@ -7,9 +7,21 @@
 # 5/9/08
 #
 
+
+"""
+Information Flow:
+
+1. Parse .rml file into movetable
+2. movetable -> movegen() -> [dx,dy,dz]
+3. [dx,dy,dz] + feedspeed in inches/min (constant per pen up and pen down) -> stepgen (modifies machine duration)
+4. machine -> xmit -> packet sent to controller
+5. packet -> simmove -> estimated [dx, dy, dz] + rate + movetime
+
+"""
+
 #------------IMPORTS-----------------------------------------------------------------------
 
-import sys
+import sys, os
 import commands
 import csv
 import numpy
@@ -19,138 +31,17 @@ import math
 import serial
 import pygame
 
+from GUI import GUI, Drawer
+from parsers import RMLParser
+
 #-----------OBJECTS-----------------------------------------------------------------------
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 def GCD(a, b):
     while b != 0:
         (a, b) = (b, a%b)
     return a
-
-class computer(object):
-
-    rml = 0
-    movetable = 0
-    feedmodetable = 0
-    zup = 0
-    tableindex = 0
-    
-    def loadrml(self):
-        try:
-            rmlfile = sys.argv[1] #stores filename of source RML file into x
-            rmlfile = open(rmlfile, mode = 'r')   #opens RML file as object rmlfile
-            rmlfile.seek(0,0)   #sets file pointer at beginning
-
-            rmlparser = csv.reader(rmlfile, delimiter=';', quoting = csv.QUOTE_ALL)     #parses rmlfile as a semi-colon delimited file
-            rml = rmlparser.next()
-            self.rml = rml
-            rmlfile.close()
-        except IndexError:
-            print "Please enter name of RML file following virtualmachine.py"
-        
-    def parserml(self):
-        zup = 0 #Initialize RML z axis up position
-        zdown = 0 #Initialize RML z axis down position
-        currentx = 0 #Initialize current x axis position
-        currenty = 0 #Initialize current y axis position
-        movetable = numpy.array([[1,1,1],[1,1,1]],float)  #table of xyz moves in x,y,z format
-        currentmove = numpy.array([[1,1,1],[1,1,1]],float)    #current move in x,y,z format
-
-        feedmodetable = numpy.array([[1],[1]],float) #table of feed modes (0 = plunge, 1 = retract, 2 = downfeed, 3 = upfeed)
-        feedmode = {'plunge':0, 'retract':1, 'downfeed':2, 'upfeed':3}
-        
-        currentfeed = numpy.array([[1],[1]],float) #current feedrate in in/min                       
-
-        rmllength = len(self.rml)
-
-        for h in xrange(rmllength):
-            commander = 0
-            firstterm = 0
-            secondterm = 0
-            currententry = self.rml[h]
-            entrylength = len(currententry)
-            for i in xrange(entrylength):
-                j = i+2
-                if currententry[i:j]=="PA": #no idea what the hell this is
-                    commander = "PA"
-                elif currententry[i:j] == "VS": #xy travel speed
-                    commander = "VS"
-                    firstterm = j
-                    xyspeed = currententry[firstterm:entrylength]
-                    xyspeed = float(xyspeed)
-                elif currententry[i:j]== "VZ": #z travel speed
-                    commander = "VZ"
-                    firstterm = j
-                    zspeed = currententry[firstterm:entrylength]
-                    zspeed = float(zspeed)
-                elif currententry[i:j] == "PZ":
-                    commander = "PZ"
-                    firstterm = j
-                elif currententry[i:j] == "PU":
-                    commander = "PU"
-                    firstterm = j
-                elif currententry[i:j] == "PD":
-                    commander = "PD"
-                    firstterm = j
-                elif currententry[i] == ",":
-                    secondterm = i
-                    
-            if commander == "PZ": #Set Z pen positions in down, up format
-                zdown = currententry[firstterm:secondterm]
-                zup = currententry[secondterm+1:entrylength]
-                zdown = float(zdown)
-                zup = float(zup)
-
-            if commander == "PD": #Pen down RML command.
-                currentmove[0,0] = currentx
-                currentmove[0,1] = currenty
-                currentmove[0,2] = zdown
-                currentfeed[0,0] = feedmode.get('plunge')
-                                
-                currentx = currententry[firstterm:secondterm]
-                currenty = currententry[secondterm+1:entrylength]
-                currentx = float(currentx)
-                currenty = float(currenty)
-                                
-                currentmove[1,0] = currentx
-                currentmove[1,1] = currenty
-                currentmove[1,2] = zdown
-                currentfeed[1,0] = feedmode.get('downfeed')
-                                
-                movetable = numpy.concatenate((movetable,currentmove),0)
-                feedmodetable = numpy.concatenate((feedmodetable,currentfeed),0)
-
-
-            if commander == "PU": #Pen up RML command.
-                currentmove[0,0] = currentx
-                currentmove[0,1] = currenty
-                currentmove[0,2] = zup
-                currentfeed[0,0] = feedmode.get('retract')
-
-                currentx = currententry[firstterm:secondterm]
-                currenty = currententry[secondterm+1:entrylength]                   
-                currentx = float(currentx)
-                currenty = float(currenty)
-                                
-                currentmove[1,0] = currentx
-                currentmove[1,1] = currenty
-                currentmove[1,2] = zup
-                currentfeed[1,0] = feedmode.get('upfeed')
-                                
-                movetable = numpy.concatenate((movetable,currentmove),0)
-                feedmodetable = numpy.concatenate((feedmodetable,currentfeed),0)
-                                
-        movetable = movetable[3::,:]    #removes blank seed
-        feedmodetable = feedmodetable[3::,:]
-                
-        movetable[1,2]=zdown          #sets the height of the initial retract move
-
-        movetable = movetable / 1000    #converts movetable to units of inches
-                                        # had been in modela units of 0.001 in
-        self.movetable=movetable
-        self.feedmodetable=feedmodetable
-        self.zup = zup
 
 class motorcontroller (object):
     clockspeed = 0 #clock speed in Hz
@@ -165,15 +56,11 @@ class motorcontroller (object):
     softwarecounter = 0 
     hardwarecounter = 0
 
-    
-    
-    
-    
 class guide(object):
         
-    vector = [0,0,0]    #establishes vector of motion
+    vector = [0, 0, 0]    #establishes vector of motion
         
-    def move(self,s):
+    def move(self, s):
         vectorarray = numpy.array(self.vector)
         travel = vectorarray*s
         return travel
@@ -191,7 +78,7 @@ class machine(object):
     
     dynamicrangeresolution = 6000   #this sets the minimum slope ratio resolution
     maxcountersize = dynamicrangeresolution**2    #this is the max counter capacity needed based on calculations in notebook from 1/26/09
-    softwarecounternumber = math.ceil(math.log(maxcountersize,2)/8)     #max number of bytes needed
+    softwarecounternumber = math.ceil(math.log(maxcountersize, 2)/8)     #max number of bytes needed
     
     guides = range(numberofaxes)
     motorcontrollers = range(numberofaxes)
@@ -203,9 +90,9 @@ class machine(object):
         
     position = numpy.zeros(numberofaxes) #current machine position (inches).
         
-    guides[0].vector = [1,0,0]
-    guides[1].vector = [0,1,0]
-    guides[2].vector = [0,0,1]
+    guides[0].vector = [1, 0, 0]
+    guides[1].vector = [0, 1, 0]
+    guides[2].vector = [0, 0, 1]
 
     motorcontrollers[0].clockspeed = 20000000
     motorcontrollers[1].clockspeed = 20000000
@@ -228,7 +115,7 @@ class machine(object):
     motorcontrollers[2].hardwarecountersize = 2**8-1
     
 
-    def move(self,commandmove):
+    def move(self, commandmove):
         #this function defines how the virtual machine moves based on its configuration and perhaps additional sensor inputs.
         #the goal is to create a model of the the machine which can be used in a virtual feedback loop by the controller.
         returnmove = numpy.zeros(self.numberofaxes)
@@ -247,7 +134,7 @@ class controller(object):
         position = virtualmachine.position                     #copies machine position to hypothetical position
         delta = numpy.zeros(len(moveto))
         
-        while max(error)>self.movtol:
+        while max(error) > self.movtol:
             error = moveto - position
             travel = virtualmachine.move(error)
             position=position + travel
@@ -295,7 +182,7 @@ class controller(object):
         directions = movingsteps/absmovingsteps        #-1 = reverse, 1 = forward
 
         if len(movingsteps)>2:
-            print "3+ AXIS SIMULTANEOUS MOVES NOT SUPPORTED BY THIS STEP GENERATOR"
+            if LOG: print "3+ AXIS SIMULTANEOUS MOVES NOT SUPPORTED BY THIS STEP GENERATOR"
 
         if len(movingsteps) !=0:        
             nomove = 0
@@ -380,9 +267,7 @@ class controller(object):
 
         distance = math.sqrt(distancesquaredsum)    #Euclidean distance of move
         movetime = distance / rate                      #Duration of move in seconds
-        print "MOVETIME", movetime
-        #print traverse
-        #drawer.goto(traverse[0], traverse[1], 'stepgen', rate=rate, movetime=movetime)
+        if LOG: print "MOVETIME", movetime
 
         scaledclock = clockspeeds / prescalars      #Motor controller clock speeds (ticks / second)
         
@@ -399,7 +284,7 @@ class controller(object):
         directions = movingsteps/absmovingsteps        #-1 = reverse, 1 = forward
 
         if len(movingsteps)>2:
-            print "3+ AXIS SIMULTANEOUS MOVES NOT SUPPORTED BY THIS STEP GENERATOR"
+            if LOG: print "3+ AXIS SIMULTANEOUS MOVES NOT SUPPORTED BY THIS STEP GENERATOR"
 
         if len(movingsteps) !=0:        
             nomove = 0
@@ -503,7 +388,7 @@ class controller(object):
             baudrate = 19200
             sertimeout = None #in seconds
     
-            serport = serial.Serial(portnumber,baudrate, timeout=sertimeout)
+            serport = serial.Serial(portnumber, baudrate, timeout=sertimeout)
     
             #-------SEND COMMAND-------------------------------------------------
     
@@ -513,7 +398,7 @@ class controller(object):
     
             start = time.time()
             serport.read()
-            print "XINT TIME", time.time() - start
+            if LOG: print "XINT TIME", time.time() - start
             
         except serial.SerialException, details:
             if DEBUG_MODE:
@@ -575,203 +460,93 @@ class controller(object):
 
         return [delta, rate, movetime]
 
-
-class Drawer(object):
+def execute_moves(moves):
     """
-    Draw circuitboard in window. Currently for debug, but eventually for shock and awe.
-    Requires pygame.
+    @param moves: iterable of Move objects
     """
-    
-    def __init__(self, pen_zoom_pairs=None):
-        """
-        Initializes window and drawing parameters, including displaying a pygame window.
-        """
-        self.max_x = 840
-        self.max_y = 680
-        
-        self.zooms = {}
-        for pen, zoom in pen_zoom_pairs:
-            self.zooms[pen] = zoom
-            
-        # line color when pen up unless more sophisticated coloring is occuring
-        self.up = (255, 255, 255)
-        # line color when pen down unless more sophisticated coloring is occuring
-        self.down = (255, 0, 0)
-        # True if pen is up, False if pen is down
-        self.is_ups = {}
-        # current pen location along x axis
-        self.xs = {}
-        # current pen location along y axis
-        self.ys = {}
-        
-        pygame.init() 
-        #create the screen
-        self.window = pygame.display.set_mode((self.max_x, self.max_y))
-        #set background
-        #self.window.fill( (30, 30, 255) )
-        self.window.fill( (0,0,0) )
-        
-    def init_pen(self, pen, zoom):
-        self.xs[pen] = int(self.max_x / 4.0) 
-        self.ys[pen] = int(self.max_y / 4.0)
-        self.is_ups[pen] = True
-        if not pen in self.zooms:
-            self.zooms[pen] = zoom
-        
-    def pen_up(self, pen):
-        self.is_ups[pen] = True
-        
-    def pen_down(self, pen):
-        self.is_ups[pen] = False
-    
-    def goto(self, x, y, pen, relative=True, zoom=None, rate=None, movetime=None):
-        """
-        Draws a line (x, y) from the current pen position. x and y are assumed to be 
-        relative to current position.
-        
-        @param x: int
-        @param y: int
-        @param rate: 
-        @param movetime: 
-        """
-        if not pen in self.xs:
-            self.init_pen(pen, zoom)
-    
-        if rate and movetime:
-            diffx = abs(self.xs[pen] - x)
-            diffy = abs(self.ys[pen] - y)
-            h = math.sqrt(diffx*diffx + diffy*diffy)
+    for m in moves:
+        move(m.x, m.y, m.z, m.rate)
 
-            nrate = round(rate)
-           #print "ABC", self.is_ups[pen], nrate, "   ", h, "      ", rate
-            hr = rate / 9.0 * 255
-            #hr = h/rate
-            #hr = (h*rate / 2500) * 255
-            #hr = movetime/rate * 200
-            
-            if hr > 255:
-                hr = 255
-            if hr < 0:
-                hr = 0
-            hg = hb = self.is_ups[pen] and hr or 0
-            color = (hr, hg, hb)
-            ret = hr
-        else:
-            color = self.is_ups[pen] and self.up or self.down
-            ret = 0
-        #pygame.draw.line(self.window, (255,255,255), (self.x, self.y), (self.x+self.zoom*x, self.y+self.zoom*y), 4)
-        if relative:
-            pygame.draw.line(self.window, color, (self.xs[pen], self.ys[pen]), (self.xs[pen]+self.zooms[pen]*x, self.ys[pen]+self.zooms[pen]*y), 1)
-            self.xs[pen] += self.zooms[pen]*x
-            self.ys[pen] += self.zooms[pen]*y
-        else:
-            pygame.draw.line(self.window, color, (self.xs[pen], self.ys[pen]), (self.zooms[pen]*x, self.zooms[pen]*y), 1)
+def move(x = None, y = None, z = None, rate = 1):
+    """
+    """
+    if x == None: x = virtualmachine.position[0]
+    if y == None: y = virtualmachine.position[1]
+    if z == None: z = virtualmachine.position[2]
+
     
-        # update window
-        pygame.display.flip()
-        
-        return ret / 1000.0 
+    moveto = [x, y, z]
+    feedspeed = rate
     
-    def check_keyboard(self):
-        """
-        pygame window loop. check if ESCAPE key is pressed to close window and exit program
-        """
-        for event in pygame.event.get(): 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE: 
-                    sys.exit(0)
-                    
-                    
-    def pause_for_space(self):
-        """
-        sleeps until SPACEBAR is pressed
-        """
-        while True:
-            for event in pygame.event.get(): 
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE:
-                        return True
-            time.sleep(.2)
-        
+    if LOG: print "commandedposition: ", moveto
+    delta = machinecontroller.movegen(moveto)
+    if moveto[2] > 0:
+        drawer.pen_down('simmove')
+    else:
+        drawer.pen_up('simmove')
+    nomove = machinecontroller.stepgen(delta, feedspeed)
+    # how much to pause for loop when in DEBUG_MODE
+    sleep_amt = 0
+    if nomove != 1:
+        outgoing = machinecontroller.xmit()
+        [delta, rate, movetime] = machinecontroller.simmove(outgoing)
+        if LOG: print "SIMMOVE MOVETIME", movetime
+        sleep_amt = drawer.goto(delta[0], delta[1], 'simmove', rate=rate, movetime=movetime)
+        if LOG: print "MOVE COMPLETE", delta
+    else:
+        delta = numpy.zeros(virtualmachine.numberofaxes)
+        if LOG: print "NO MOVE HERE!"
+
+    virtualmachine.position = virtualmachine.position + delta
+
+    if LOG: print "machine position: " , virtualmachine.position
+    if LOG: print ""
+    
+    gui.check_events()
+                
+    if DEBUG_MODE:
+        # pause to mimic line drawing
+        time.sleep(sleep_amt)
+        # wait for space bar
+        #drawer.pause_for_space()
+
 if __name__ == "__main__":
     """ This is the main loop that gets executed when running this file
         from the command line """
-    #moveto = numpy.array([0.5,0.5,0])
+
+    if len(sys.argv) > 0:
+        rmlfile = sys.argv[1]
+    else:
+        print "Program takes 1 required argument: name of RML file"
+        sys.exit(1)
+    
+    # Try to import local environment settings. Users are encouraged to 
+    # copy default_settings.py to settings.py, which can then be modified
+    # according to the user's situation.
+    # settings.py should not be committed to the repo.
+    try:
+        from settings import *
+    except:
+        from default_settings import *
+
     virtualmachine = machine()
     machinecontroller = controller()
-    localcomputer = computer()
-    localcomputer.loadrml()
-    localcomputer.parserml()
-    #print localcomputer.movetable
-    #print localcomputer.feedmodetable
+
+    gui = GUI(machinecontroller)
+    drawer = Drawer(gui.window, [('simmove', 400)])
+
+    virtualmachine.position[0] = 1
+    virtualmachine.position[1] = 1
+    #For some reason setting this also changes the local computer movetable!!! Why???
+    virtualmachine.position[2] = 0.002
+
+    # mill board!
+    moves = RMLParser().parse_rml(rmlfile)
+    execute_moves(moves)
     
-    drawer = Drawer([('stepgen',4000), ('simmove',100), ('feedmode',1)])
-
-    #for move in localcomputer.movetable:
-    #    drawer.goto(move[0], move[1], 'movetable', relative=False)
-
-    plungespeed = 4
-    retractspeed = 4
-    downfeedspeed = 4
-    upfeedspeed = 8
-    
-    virtualmachine.position = localcomputer.movetable[0]    #this is a hack to prevent 3D motion and still be able to set tool height
-    virtualmachine.position[2] = 0.002                #For some reason setting this also changes the local computer movetable!!! Why???
-
-    LOG = True
-    print "MV LENGTH", len(localcomputer.movetable)
-    for i in range(0,len(localcomputer.movetable)):
-        if LOG: print "RML Line: ", i
-        moveto = localcomputer.movetable[i]
-        feedmode = localcomputer.feedmodetable[i]
-        if feedmode == 0:
-            feedspeed = plungespeed
-        if feedmode == 1:
-            feedspeed = retractspeed
-        if feedmode == 2:
-            feedspeed = downfeedspeed
-        if feedmode == 3:
-            feedspeed = upfeedspeed
-        if LOG: print "commandedposition: ", moveto
-        delta = machinecontroller.movegen(moveto)
-        if moveto[2] > 0:
-            drawer.pen_down('stepgen')
-            drawer.pen_down('simmove')
-        else:
-            drawer.pen_up('stepgen')
-            drawer.pen_up('simmove')
-        nomove = machinecontroller.stepgen(delta, feedspeed)
-        # how much to pause for loop when in DEBUG_MODE
-        sleep_amt = 0
-        if nomove != 1:
-            outgoing = machinecontroller.xmit()
-            [delta, rate, movetime] = machinecontroller.simmove(outgoing)
-            print "SIMMOVE MOVETIME", movetime
-            sleep_amt = drawer.goto(delta[0], delta[1], 'simmove', rate=rate, movetime=movetime)
-            if LOG: print "MOVE COMPLETE", delta
-        else:
-            delta = numpy.zeros(virtualmachine.numberofaxes)
-            if LOG: print "NO MOVE HERE!"
-    
-        virtualmachine.position = virtualmachine.position + delta
-
-        if LOG: print "machine position: " , virtualmachine.position
-        if LOG: print ""
-        
-        print "draw line"
-        drawer.check_keyboard()
-        print "done drawing"
-                    
-        if DEBUG_MODE:
-            # pause to mimic line drawing
-            print "go to sleep"
-            time.sleep(sleep_amt)
-            print "wake up"
-            # wait for space bar
-            #drawer.pause_for_space()
-
     print "\nFINISHED BOARD!"
 
     # don't end program until press ESCAPE key
     while True: 
-        drawer.check_keyboard()
+        gui.check_events()
+        time.sleep(0.2)
