@@ -1,12 +1,3 @@
-# Virtual Machine
-# Rapid Prototyping of Rapid Prototyping Machines
-#
-# Ilan E. Moyer
-# for the MIT Center for Bits and Atoms
-#
-# 5/9/08
-#
-
 
 """
 Information Flow:
@@ -33,6 +24,8 @@ import pygame
 
 from GUI import GUI, Drawer
 from parsers import RMLParser
+
+from default_settings import *
 
 #-----------OBJECTS-----------------------------------------------------------------------
 
@@ -519,15 +512,6 @@ if __name__ == "__main__":
     else:
         print "Program takes 1 required argument: name of RML file"
         sys.exit(1)
-    
-    # Try to import local environment settings. Users are encouraged to 
-    # copy default_settings.py to settings.py, which can then be modified
-    # according to the user's situation.
-    # settings.py should not be committed to the repo.
-    try:
-        from settings import *
-    except:
-        from default_settings import *
 
     virtualmachine = machine()
     machinecontroller = controller()
