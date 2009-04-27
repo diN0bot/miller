@@ -503,16 +503,12 @@ def move(x = None, y = None, z = None, rate = 1):
         # wait for space bar
         #drawer.pause_for_space()
 
-if __name__ == "__main__":
-    """ This is the main loop that gets executed when running this file
-        from the command line """
-
-    if len(sys.argv) > 0:
-        rmlfile = sys.argv[1]
-    else:
-        print "Program takes 1 required argument: name of RML file"
-        sys.exit(1)
-
+def app_setup(rmlfile=None):
+    global virtualmachine
+    global machinecontroller
+    global drawer
+    global gui
+     
     virtualmachine = machine()
     machinecontroller = controller()
 
@@ -524,6 +520,18 @@ if __name__ == "__main__":
     #For some reason setting this also changes the local computer movetable!!! Why???
     virtualmachine.position[2] = 0.002
 
+if __name__ == "__main__":
+    """ This is the main loop that gets executed when running this file
+        from the command line """
+    
+    app_setup()
+
+    if len(sys.argv) > 0:
+        rmlfile = sys.argv[1]
+    else:
+        print "Program takes 1 required argument: name of RML file"
+        sys.exit(1)
+        
     # mill board!
     moves = RMLParser().parse_rml(rmlfile)
     execute_moves(moves)
@@ -534,3 +542,4 @@ if __name__ == "__main__":
     while True: 
         gui.check_events()
         time.sleep(0.2)
+

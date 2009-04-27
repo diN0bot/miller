@@ -7,7 +7,8 @@
 2. Optional: Override global default_settings.py with local,
    non-version controlled settings.py
    
-   Copy default_settings.py to a new file called settings.py
+   1. Create new file called settings.py
+   2. Override variables defined in default_settings.py in settings.py
    
    Edit settings.py as necessary. settings.py is "git ignored", 
    so it should never be committed to the repo.
@@ -33,3 +34,5 @@ GUI that allows one to select input board files from the input_files directory.
 If one provides a file as an argument to miller.py, it will be automatically milled.
 
     python miller.py input_files/test.rml
+
+Press ESCAPE to quit

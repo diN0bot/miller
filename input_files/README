@@ -1,0 +1,17 @@
+
+The .py files are automatically created by running, on the command line,
+miller.py with a rml filename as the first argument.
+
+One could also run parsers/rmlparser.py on the command line with a rml filename
+as the first argument.
+
+You should set your PYTHONPATH to the repo root directory, and run these scripts
+from the root, as well.
+
+    $ export PYTHONPATH=./
+    $ python parsers/rmlparser.py input_files/foo.rml
+    $ python input_files/foo.py
+
+ Note that the above commands are equivalent to the following:
+ 	
+     $ python miller.py input_files/fool.rml

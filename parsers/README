@@ -1,0 +1,10 @@
+
+These parsers can be run on the command line to directly create Virtual
+Machine Controller (VMC) python scripts. For example:
+
+    $ export PYTHONPATH=./
+    $ python parsers/rmlparser.py input_files/foo.rml
+
+will create the following VMC file:
+
+    input_files/foo.py

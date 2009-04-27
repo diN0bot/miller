@@ -21,7 +21,7 @@ class RMLParser(object):
         self.penposition = "down"
         
         self.tableindex = 0
-        self.usevirtualmachine = "virtualmachine9"
+        self.usevirtualmachine = ".." # name of module containing move()
         self.rmlunits = 0.001 #rml units in thousandths of an inch
         
         self.traversespeed = 8 # units are in/min
