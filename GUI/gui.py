@@ -12,6 +12,7 @@ import sys
 import math
 import pygame
 from gui_commands import *
+from drawer import Drawer
 
 class GUI(object):
     """
@@ -45,6 +46,7 @@ class GUI(object):
         self.control_panel_bounds = pygame.Rect(midpnt, 0, self.max_x-midpnt, self.max_y)
         
         self.control_panel = ControlPanel(self.window, self.control_panel_bounds)
+        self.drawer = Drawer(self.window)
         
         self.control_panel.draw()
         

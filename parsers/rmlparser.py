@@ -21,7 +21,7 @@ class RMLParser(object):
         self.penposition = "down"
         
         self.tableindex = 0
-        self.usevirtualmachine = ".." # name of module containing move()
+        self.main_module_name = "miller"
         self.rmlunits = 0.001 #rml units in thousandths of an inch
         
         self.traversespeed = 8 # units are in/min
@@ -46,7 +46,7 @@ class RMLParser(object):
     	Writes a move call to the VMC file, also (convenience call to self._write_vmc)
     	"""
         self.moves.append(Move(x=x, y=y, z=z, rate=rate))
-        self._write_vmc("vm.move(%s, %s, %s, %s)" % (x, y, z, rate))
+        self._write_vmc("machinecontroller.add_moves(Move(%s, %s, %s, %s))" % (x, y, z, rate))
     
     def parse_rml(self, rml_filename, output_vmc=True):
         """
@@ -73,7 +73,24 @@ class RMLParser(object):
         if output_vmc:
             self.vmc = open(vmcfile, 'w')
 
-        self._write_vmc("import " + self.usevirtualmachine + " as vm" + os.linesep)
+        self._write_vmc("from " + self.main_module_name + " import Controller, GUI, settings")
+        self._write_vmc("from move import Move")
+        self._write_vmc("")
+        
+        self._write_vmc("""
+machinecontroller = Controller(settings.SERIAL_PORT)
+
+gui = GUI(machinecontroller)
+gui.drawer.init_pen('simmove', 400)
+
+machinecontroller.set_gui(gui)
+
+# set start position
+machinecontroller.virtualmachine.position[0] = 1
+machinecontroller.virtualmachine.position[1] = 1
+#For some reason setting this also changes the local computer movetable!!! Why???
+machinecontroller.virtualmachine.position[2] = 0.002
+""")
         self._write_vmc("traversespeed = " + str(self.traversespeed))
         self._write_vmc("retractspeed = " + str(self.retractspeed))
         
@@ -169,6 +186,7 @@ class RMLParser(object):
                     self._make_move(currentx*self.rmlunits, currenty*self.rmlunits, self.z_up, self.traversespeed)
                     self.penposition = "up"
 
+        self._write_vmc("machinecontroller.mill_moves()")
         return self.moves 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ class Drawer(object):
     Requires pygame.
     """
     
-    def __init__(self, window, pen_zoom_pairs=None):
+    def __init__(self, window, pen_zoom_pairs={}):
         """
         Initializes window and drawing parameters, including displaying a pygame window.
         """

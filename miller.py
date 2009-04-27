@@ -23,7 +23,7 @@ import math
 import serial
 import pygame
 
-from GUI import GUI, Drawer
+from GUI import GUI
 from parsers import RMLParser
 
 import default_settings as settings
@@ -138,6 +138,20 @@ class Controller(object):
         self.baudrate = 19200
         #in seconds
         self.sertimeout = None
+        
+        self.moves = []
+        # index matches move that will be executed next
+        self.moves_index = 0
+        
+        self.virtualmachine = Machine()
+        
+        self.gui = None
+    
+    def set_gui(self, gui):
+        """
+        
+        """
+        self.gui = gui
     
     def movegen(self, moveto):
         """
@@ -147,12 +161,12 @@ class Controller(object):
         #ensures that error always starts out larger than the tolerance
         error = self.movtol*2*numpy.ones(len(moveto))
         #copies machine position to hypothetical position
-        position = virtualmachine.position
+        position = self.virtualmachine.position
         delta = numpy.zeros(len(moveto))
         
         while max(error) > self.movtol:
             error = moveto - position
-            travel = virtualmachine.move(error)
+            travel = self.virtualmachine.move(error)
             position=position + travel
             delta = delta + error
                 
@@ -171,36 +185,36 @@ class Controller(object):
         # this flag gets set if a no-move condition is triggered
         nomove = 0
         distancesquaredsum = 0
-        clockspeeds = numpy.zeros(virtualmachine.numberofaxes)
-        prescalars = numpy.zeros(virtualmachine.numberofaxes)
-        stepsizes = numpy.zeros(virtualmachine.numberofaxes)
-        softwarecountersize = numpy.zeros(virtualmachine.numberofaxes)
-        hardwarecountersize = numpy.zeros(virtualmachine.numberofaxes)
+        clockspeeds = numpy.zeros(self.virtualmachine.numberofaxes)
+        prescalars = numpy.zeros(self.virtualmachine.numberofaxes)
+        stepsizes = numpy.zeros(self.virtualmachine.numberofaxes)
+        softwarecountersize = numpy.zeros(self.virtualmachine.numberofaxes)
+        hardwarecountersize = numpy.zeros(self.virtualmachine.numberofaxes)
         
-        for i in range(virtualmachine.numberofaxes):
+        for i in range(self.virtualmachine.numberofaxes):
             distancesquaredsum = distancesquaredsum + (traverse[i]*traverse[i])
-            clockspeeds[i] = virtualmachine.motorcontrollers[i].clockspeed
-            prescalars[i] = virtualmachine.motorcontrollers[i].prescalar
-            stepsizes[i] = virtualmachine.motorcontrollers[i].stepsize
-            softwarecountersize[i] = virtualmachine.motorcontrollers[i].softwarecountersize
-            hardwarecountersize[i] = virtualmachine.motorcontrollers[i].hardwarecountersize
+            clockspeeds[i] = self.virtualmachine.motorcontrollers[i].clockspeed
+            prescalars[i] = self.virtualmachine.motorcontrollers[i].prescalar
+            stepsizes[i] = self.virtualmachine.motorcontrollers[i].stepsize
+            softwarecountersize[i] = self.virtualmachine.motorcontrollers[i].softwarecountersize
+            hardwarecountersize[i] = self.virtualmachine.motorcontrollers[i].hardwarecountersize
 
         distance = math.sqrt(distancesquaredsum)    #Euclidean distance of move
-        movetime = distance / rate                      #Duration of move in seconds
+        movetime = distance / rate                  #Duration of move in seconds
         if settings.LOG: print "MOVETIME", movetime
 
         scaledclock = clockspeeds / prescalars      #Motor controller clock speeds (ticks / second)
         
-        steps = traverse / stepsizes        #number of steps needed
-        steps = numpy.round(steps)           #convert steps into integers
-        absteps = numpy.abs(steps)          #absolute step values
+        steps   = traverse / stepsizes              #number of steps needed
+        steps   = numpy.round(steps)                #convert steps into integers
+        absteps = numpy.abs(steps)                  #absolute step values
         
-        movingaxes = numpy.nonzero(steps)[0]   #isolates only the moving axes
-        movingsteps = numpy.take(steps, movingaxes)
-        absmovingsteps = numpy.take(absteps, movingaxes)
+        movingaxes        = numpy.nonzero(steps)[0] #isolates only the moving axes
+        movingsteps       = numpy.take(steps, movingaxes)
+        absmovingsteps    = numpy.take(absteps, movingaxes)
         counter_durations = numpy.zeros(len(steps))
 
-        directions = movingsteps/absmovingsteps        #-1 = reverse, 1 = forward
+        directions = movingsteps/absmovingsteps     #-1 = reverse, 1 = forward
 
         if len(movingsteps)>2:
             if settings.LOG: print "3+ AXIS SIMULTANEOUS MOVES NOT SUPPORTED BY THIS STEP GENERATOR"
@@ -224,7 +238,7 @@ class Controller(object):
             stepinterval = overall_duration / absmovingsteps
     
             softwarecounterrange = (softwarecountersize / maxsteps).astype(int)
-            hardwarecounterrange = numpy.ones(virtualmachine.numberofaxes)*min(hardwarecountersize)
+            hardwarecounterrange = numpy.ones(self.virtualmachine.numberofaxes)*min(hardwarecountersize)
     
             # movetime / number of sw counter ticks = time per click
             neededtimeperpulse = movetime / overall_duration
@@ -239,7 +253,7 @@ class Controller(object):
             hardwarecounters = numpy.ceil(neededtimeperpulse/(prehwcounterpulsetime*softwarecounters))
     
             
-            durations = numpy.zeros(virtualmachine.numberofaxes)
+            durations = numpy.zeros(self.virtualmachine.numberofaxes)
             numpy.put(durations, movingaxes, stepinterval)
             
             numpy.put(counter_durations, movingaxes, moving_durations)
@@ -247,23 +261,23 @@ class Controller(object):
             counter_durations = counter_durations * softwarecounters
             overall_duration = overall_duration * softwarecounters[0]   #this is a hack for now
         
-            directions2 = numpy.zeros(virtualmachine.numberofaxes)
+            directions2 = numpy.zeros(self.virtualmachine.numberofaxes)
             numpy.put(directions2, movingaxes, directions)
     
-            for i in range(virtualmachine.numberofaxes):
-                virtualmachine.motorcontrollers[i].hardwarecounter = hardwarecounters[i]
-                virtualmachine.motorcontrollers[i].softwarecounter = counter_durations[i]
-                virtualmachine.motorcontrollers[i].duration = overall_duration
+            for i in range(self.virtualmachine.numberofaxes):
+                self.virtualmachine.motorcontrollers[i].hardwarecounter = hardwarecounters[i]
+                self.virtualmachine.motorcontrollers[i].softwarecounter = counter_durations[i]
+                self.virtualmachine.motorcontrollers[i].duration = overall_duration
                 if directions2[i] == -1:
                     directions2[i] = 2
-                virtualmachine.motorcontrollers[i].direction = directions2[i]
+                self.virtualmachine.motorcontrollers[i].direction = directions2[i]
         else:
             nomove = 1
             for i in range(virtualmachine.numberofaxes):
-                    virtualmachine.motorcontrollers[i].hardwarecounter = 0
-                    virtualmachine.motorcontrollers[i].softwarecounter = 0
-                    virtualmachine.motorcontrollers[i].duration = 0
-                    virtualmachine.motorcontrollers[i].direction = 0
+                    self.virtualmachine.motorcontrollers[i].hardwarecounter = 0
+                    self.virtualmachine.motorcontrollers[i].softwarecounter = 0
+                    self.virtualmachine.motorcontrollers[i].duration = 0
+                    self.virtualmachine.motorcontrollers[i].direction = 0
             return nomove
         
 
@@ -292,16 +306,16 @@ class Controller(object):
         @raise serial.SerialException: If cannot open serial port and in use-serial mode (USE_SERIAL is True)
         """
         packetlength = 13
-        xmitteraxes = virtualmachine.numberofaxes
+        xmitteraxes = self.virtualmachine.numberofaxes
         outgoing = numpy.zeros(packetlength)
         outgoing[0] = 255
-        outgoing[1] = virtualmachine.motorcontrollers[0].hardwarecounter
+        outgoing[1] = self.virtualmachine.motorcontrollers[0].hardwarecounter
         for i in range(xmitteraxes):
-            outgoing[i*2+2] = int(virtualmachine.motorcontrollers[i].softwarecounter % 256)
-            outgoing[i*2+3] = int(virtualmachine.motorcontrollers[i].softwarecounter / 256)
-            outgoing[12] = outgoing[12] + virtualmachine.motorcontrollers[i].direction*(4**i)
+            outgoing[i*2+2] = int(self.virtualmachine.motorcontrollers[i].softwarecounter % 256)
+            outgoing[i*2+3] = int(self.virtualmachine.motorcontrollers[i].softwarecounter / 256)
+            outgoing[12] = outgoing[12] + self.virtualmachine.motorcontrollers[i].direction*(4**i)
             
-        duration = virtualmachine.motorcontrollers[0].duration
+        duration = self.virtualmachine.motorcontrollers[0].duration
 
         outgoingindex = 11
         remainder = duration
@@ -338,20 +352,20 @@ class Controller(object):
         @param outgoing: packet sent over serial port
         @return: [delta, rate, movetime]
         """
-        xmitteraxes = virtualmachine.numberofaxes
+        xmitteraxes     = self.virtualmachine.numberofaxes
         hardwarecounter = numpy.ones(xmitteraxes)*outgoing[1]
         softwarecounter = numpy.ones(xmitteraxes)
-        stepsize = numpy.zeros(xmitteraxes)
-        clockspeeds = numpy.zeros(xmitteraxes)
-        prescalars = numpy.zeros(xmitteraxes)
-        directions = numpy.zeros(xmitteraxes)
-        steps = numpy.zeros(xmitteraxes)
+        stepsize        = numpy.zeros(xmitteraxes)
+        clockspeeds     = numpy.zeros(xmitteraxes)
+        prescalars      = numpy.zeros(xmitteraxes)
+        directions      = numpy.zeros(xmitteraxes)
+        steps           = numpy.zeros(xmitteraxes)
         
         for i in range(3):
-            softwarecounter[i]=outgoing[i*2+2]+outgoing[i*2+3]*256
-            stepsize[i]=virtualmachine.motorcontrollers[i].stepsize
-            clockspeeds[i] = virtualmachine.motorcontrollers[i].clockspeed
-            prescalars[i] = virtualmachine.motorcontrollers[i].prescalar
+            softwarecounter[i] = outgoing[i*2+2]+outgoing[i*2+3]*256
+            stepsize[i]        = self.virtualmachine.motorcontrollers[i].stepsize
+            clockspeeds[i]     = self.virtualmachine.motorcontrollers[i].clockspeed
+            prescalars[i]      = self.virtualmachine.motorcontrollers[i].prescalar
 
         duration = outgoing[8]+outgoing[9]*256+outgoing[10]*256**2+outgoing[11]*256**3
 
@@ -383,89 +397,85 @@ class Controller(object):
         rate = distance / minutes
 
         return [delta, rate, movetime]
-
-def execute_moves(moves):
-    """
-    @param moves: iterable of Move objects
-    """
-    for m in moves:
-        move(m.x, m.y, m.z, m.rate)
-
-def move(x = None, y = None, z = None, rate = 1):
-    """
-    """
-    if x == None: x = virtualmachine.position[0]
-    if y == None: y = virtualmachine.position[1]
-    if z == None: z = virtualmachine.position[2]
-
     
-    moveto = [x, y, z]
-    feedspeed = rate
+    def add_moves(self, moves):
+        """
+        @param moves: single Move instance or list, tuple of Move objects 
+        """
+        if isinstance(moves, (list, tuple)):
+            self.moves += moves
+        else:
+            self.moves.append(moves)
     
-    if settings.LOG: print "commandedposition: ", moveto
-    delta = machinecontroller.movegen(moveto)
-    if moveto[2] > 0:
-        drawer.pen_down('simmove')
-    else:
-        drawer.pen_up('simmove')
-    nomove = machinecontroller.stepgen(delta, feedspeed)
-    # how much to pause for loop when not in USE_SERIAL
-    sleep_amt = 0
-    if nomove != 1:
-        outgoing = machinecontroller.xmit()
-        [delta, rate, movetime] = machinecontroller.simmove(outgoing)
-        if settings.LOG: print "SIMMOVE MOVETIME", movetime
-        sleep_amt = drawer.goto(delta[0], delta[1], 'simmove', rate=rate, movetime=movetime)
-        if settings.LOG: print "MOVE COMPLETE", delta
-    else:
-        delta = numpy.zeros(virtualmachine.numberofaxes)
-        if settings.LOG: print "NO MOVE HERE!"
-
-    virtualmachine.position = virtualmachine.position + delta
-
-    if settings.LOG: print "machine position: " , virtualmachine.position
-    if settings.LOG: print ""
+    def mill_moves(self):
+        for move in self.moves:
+            self.mill_move(move.x, move.y, move.z, move.rate)
+            self.moves_index += 1
     
-    gui.check_events()
-                
-    if not settings.USE_SERIAL:
-        # pause to mimic line drawing
-        time.sleep(sleep_amt)
-        # wait for space bar
-        #drawer.pause_for_space()
-
-def app_setup(rmlfile=None):
-    global virtualmachine
-    global machinecontroller
-    global drawer
-    global gui
-     
-    virtualmachine = Machine()
-    machinecontroller = Controller(settings.SERIAL_PORT)
-
-    gui = GUI(machinecontroller)
-    drawer = Drawer(gui.window, [('simmove', 400)])
-
-    virtualmachine.position[0] = 1
-    virtualmachine.position[1] = 1
-    #For some reason setting this also changes the local computer movetable!!! Why???
-    virtualmachine.position[2] = 0.002
-
-if __name__ == "__main__":
-    """ This is the main loop that gets executed when running this file
-        from the command line """
-    
-    app_setup()
-
-    if len(sys.argv) > 0:
-        rmlfile = sys.argv[1]
-    else:
-        print "Program takes 1 required argument: name of RML file"
-        sys.exit(1)
+    def mill_move(self, x = None, y = None, z = None, rate = 1):
+        """
+        """
         
+        if x == None: x = self.virtualmachine.position[0]
+        if y == None: y = self.virtualmachine.position[1]
+        if z == None: z = self.virtualmachine.position[2]
+
+        moveto = [x, y, z]
+        feedspeed = rate
+        
+        if settings.LOG: print "commandedposition: ", moveto
+        delta = self.movegen(moveto)
+        if self.gui:
+            if moveto[2] > 0:
+                self.gui.drawer.pen_down('simmove')
+            else:
+                self.gui.drawer.pen_up('simmove')
+        nomove = self.stepgen(delta, feedspeed)
+        # how much to pause for loop when not in USE_SERIAL
+        sleep_amt = 0
+        if nomove != 1:
+            outgoing = self.xmit()
+            [delta, rate, movetime] = self.simmove(outgoing)
+            if settings.LOG: print "SIMMOVE MOVETIME", movetime
+            if self.gui:
+                sleep_amt = self.gui.drawer.goto(delta[0], delta[1], 'simmove', rate=rate, movetime=movetime)
+            if settings.LOG: print "MOVE COMPLETE", delta
+        else:
+            delta = numpy.zeros(self.virtualmachine.numberofaxes)
+            if settings.LOG: print "NO MOVE HERE!"
+    
+        self.virtualmachine.position = self.virtualmachine.position + delta
+    
+        if settings.LOG: print "machine position: " , self.virtualmachine.position
+        if settings.LOG: print ""
+        
+        if self.gui:
+            self.gui.check_events()
+                    
+        if not settings.USE_SERIAL and self.gui:
+            # pause to mimic line drawing
+            time.sleep(sleep_amt)
+            # wait for space bar
+            #gui.drawer.pause_for_space()
+
+def run_app(moves):
+    
+    machinecontroller = Controller(settings.SERIAL_PORT)
+    machinecontroller.add_moves(moves)
+    
+    gui = GUI(machinecontroller)
+    gui.drawer.init_pen('simmove', 400)
+    
+    machinecontroller.set_gui(gui)
+
+    # set start position
+    machinecontroller.virtualmachine.position[0] = 1
+    machinecontroller.virtualmachine.position[1] = 1
+    #For some reason setting this also changes the local computer movetable!!! Why???
+    machinecontroller.virtualmachine.position[2] = 0.002
+    
     # mill board!
-    moves = RMLParser().parse_rml(rmlfile)
-    execute_moves(moves)
+    machinecontroller.mill_moves()
     
     print "\nFINISHED BOARD!"
 
@@ -474,3 +484,17 @@ if __name__ == "__main__":
         gui.check_events()
         time.sleep(0.2)
 
+
+if __name__ == "__main__":
+    """ This is the main loop that gets executed when running this file
+        from the command line """
+    
+    if len(sys.argv) > 0:
+        rmlfile = sys.argv[1]
+    else:
+        print "Program takes 1 required argument: name of RML file"
+        sys.exit(1)
+        
+    moves = RMLParser().parse_rml(rmlfile)
+    
+    run_app(moves)
