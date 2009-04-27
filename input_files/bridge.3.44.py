@@ -1,4 +1,4 @@
-import virtualmachine9 as vm
+import .. as vm
 
 traversespeed = 8
 retractspeed = 8
