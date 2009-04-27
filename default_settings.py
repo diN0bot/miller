@@ -9,10 +9,10 @@
 LOG = True
 
 # If True, will not attempt to communicate over the serial port
-DEBUG = False
+USE_SERIAL = False
 
 # Serial port number 
-port_number = 3
+SERIAL_PORT = 3
 
 # Try to import local environment settings
 try:
