@@ -1,20 +1,17 @@
-# Virtual Machine
-# Rapid Prototyping of Rapid Prototyping Machines
-#
-# Ilan E. Moyer
-# for the MIT Center for Bits and Atoms
-#
-# 5/9/08
-#
+"""
+Main user interaction module.
 
-#------------IMPORTS-----------------------------------------------------------------------
+GUI is the main class. For example, it contains a ControlPanel, which in turn contains a tabbed pane,
+which in turn contains tabs, which in turn contains buttons. Drawing and event handling
+are piped down the chain.
 
+Drawer is in a separate file and is instantiated externally to GUI. Eventually we might want
+to refactor this: put ControlPanel in it's own file; GUI contains Drawer.
+"""
 import sys
 import math
 import pygame
 from gui_commands import *
-
-#-----------OBJECTS-----------------------------------------------------------------------
 
 class GUI(object):
     """
@@ -147,6 +144,16 @@ class ControlPanel(object):
         self.tabbed_pane.check_event(event)
         
 def create_item(window, text, x, y, parent, color=(100,193,212), command=None, bevel=True):
+    """
+    Factory method. All buttons and labels should be constructed using this method.
+    @param text: item text
+    @param x: x bound of item relative to parent
+    @param y: y bound of item relative to parent
+    @param parent: parent container. This is important because the created item's absolute
+        bounds are based on it's relative x,y position plus it's parent's absolute bounds.
+    @param color: background color
+    @param bevel: If True, will add drop shadows around item. Not bevel per se...
+    """
     font = pygame.font.Font(None, 20)
     text_width, text_height = font.size(text)
     text_surface = font.render(text,True,(0,0,0))
@@ -180,6 +187,11 @@ class TabbedPane:
         self.tabs = []
         
     def add_pane(self, name):
+        """
+        All panes should be constructed using this factory method
+        @param name: Tab label
+        @return: constructed Tab
+        """
         tab = Tab(tab_rank=len(self.tabs),
                   parent=self,
                   color=self.color,
@@ -190,6 +202,10 @@ class TabbedPane:
         return tab
     
     def select_tab(self, selected_tab):
+        """
+        Sets the tab selection
+        @param selected_tab: Tab. Should be in self.tabs
+        """
         for tab in self.tabs:
             if tab == selected_tab:
                 tab.selected = True

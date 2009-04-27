@@ -1,7 +1,16 @@
 
-==== RUN FROM COMMAND LINE ====
+==== INSTALLATION ====
 
-    python miller.py input_files/test.rml
+1. Pull from github
+    http://github.com/diN0bot/miller/tree/master
+    
+2. Optional: Override global default_settings.py with local,
+   non-version controlled settings.py
+   
+   Copy default_settings.py to a new file called settings.py
+   
+   Edit settings.py as necessary. settings.py is "git ignored", 
+   so it should never be committed to the repo.
 
 ==== DEPENDENCIES ====
 
@@ -16,3 +25,11 @@
      download - http://www.ftdichip.com/Drivers/VCP.htm
      installation guide - http://www.ftdichip.com/Documents/InstallGuides.htm
 
+==== RUN FROM COMMAND LINE ====
+
+milly.py contains the main entry point for the complete app, including a
+GUI that allows one to select input board files from the input_files directory.
+
+If one provides a file as an argument to miller.py, it will be automatically milled.
+
+    python miller.py input_files/test.rml

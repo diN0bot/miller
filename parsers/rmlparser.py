@@ -6,7 +6,8 @@ from move import Move
 
 class RMLParser(object):
     """
-    Parses RML files into move objects and Virtual Machine Controller Language
+    Parses RML files into Moves and Virtual Machine Controller (VMC) files.
+    VMC are python commands that correspond to executing Moves.
     """
     def __init__(self):
         self.rml = None
