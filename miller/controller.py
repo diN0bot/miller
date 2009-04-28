@@ -471,12 +471,15 @@ class Controller(object):
         """
         Continue milling moves in move queue.
         """
+        self.one_offs.pause()
         self.board.go()
     
     def pause_board(self):
         """
-        Stop milling moves in move queue. Resume will mill_board()
+        Stop milling moves in move queue. Resume with mill_board()
         """
+        self.one_offs.reset()
+        self.one_offs.go()
         self.board.pause()
         
     def exit(self):

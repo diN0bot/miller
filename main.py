@@ -39,7 +39,7 @@ def run_app(moves):
         controller.set_board(moves)
         
         gui = GUI(controller)
-        gui.drawer.init_pen('simmove', 200)
+        gui.drawer.init_pen('simmove', 400)
         
         controller.set_gui(gui)
     

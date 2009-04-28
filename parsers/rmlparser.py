@@ -44,7 +44,6 @@ class RMLParser(object):
     	Appends a Move instance to the moves list.
     	Writes a move call to the VMC file, also (convenience call to self._write_vmc)
     	"""
-        print "MAKE MOVE", x, y, z, rate
         self.moves.append(Move(x=x, y=y, z=z, rate=rate))
         self._write_vmc("moves.append(Move(%s, %s, %s, %s))" % (x, y, z, rate))
     
