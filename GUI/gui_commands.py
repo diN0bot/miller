@@ -7,30 +7,73 @@ should be passed in upon initialization.
 
 import pygame
 
-"""========================================================================="""
-"""  Machine Commands """
-"""========================================================================="""
+#-----------Machine Commands---------------------------------------------------
+
 class LeftCommand(object):
     """ job board left """
     
-    def __init__(self, machine):
-        self.machine = machine
+    def __init__(self, controller):
+        self.controller = controller
         
     def do(self):
-        self.machine.jog_left()
+        self.controller.jog_left()
 
 class RightCommand(object):
     """ job board right """
     
-    def __init__(self, machine):
-        self.machine = machine
+    def __init__(self, controller):
+        self.controller = controller
         
     def do(self):
-        self.machine.jog_right()
+        self.controller.jog_right()
+        
+class TowardCommand(object):
+    """ job board toward """
+    
+    def __init__(self, controller):
+        self.controller = controller
+        
+    def do(self):
+        self.controller.jog_toward()
+        
+class AwayCommand(object):
+    """ job board away """
+    
+    def __init__(self, controller):
+        self.controller = controller
+        
+    def do(self):
+        self.controller.jog_away()
+        
+class UpCommand(object):
+    """ set pen up """
+    
+    def __init__(self, controller):
+        self.controller = controller
+        
+    def do(self):
+        self.controller.pen_up()
 
-"""========================================================================="""
-"""  GUI Commands """
-"""========================================================================="""
+class DownCommand(object):
+    """ set pen down """
+    
+    def __init__(self, controller):
+        self.controller = controller
+        
+    def do(self):
+        self.controller.jog_down()
+
+class CutCommand(object):
+    """ set pen cut """
+    
+    def __init__(self, controller):
+        self.controller = controller
+        
+    def do(self):
+        self.controller.pen_cut()
+
+
+#-----------GUI Commands-------------------------------------------------------
     
 class SelectTab(object):
     """ job board right """

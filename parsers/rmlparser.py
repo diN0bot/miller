@@ -2,7 +2,7 @@
 import sys
 import os
 import csv
-from move import Move
+from miller import Move
 
 class RMLParser(object):
     """
@@ -21,7 +21,6 @@ class RMLParser(object):
         self.penposition = "down"
         
         self.tableindex = 0
-        self.main_module_name = "miller"
         self.rmlunits = 0.001 #rml units in thousandths of an inch
         
         self.traversespeed = 8 # units are in/min
@@ -45,8 +44,9 @@ class RMLParser(object):
     	Appends a Move instance to the moves list.
     	Writes a move call to the VMC file, also (convenience call to self._write_vmc)
     	"""
+        print "MAKE MOVE", x, y, z, rate
         self.moves.append(Move(x=x, y=y, z=z, rate=rate))
-        self._write_vmc("machinecontroller.add_moves(Move(%s, %s, %s, %s))" % (x, y, z, rate))
+        self._write_vmc("moves.append(Move(%s, %s, %s, %s))" % (x, y, z, rate))
     
     def parse_rml(self, rml_filename, output_vmc=True):
         """
@@ -73,24 +73,11 @@ class RMLParser(object):
         if output_vmc:
             self.vmc = open(vmcfile, 'w')
 
-        self._write_vmc("from " + self.main_module_name + " import Controller, GUI, settings")
-        self._write_vmc("from move import Move")
+        self._write_vmc("from main import run_app")
+        self._write_vmc("from miller import Move")
         self._write_vmc("")
         
-        self._write_vmc("""
-machinecontroller = Controller(settings.SERIAL_PORT)
-
-gui = GUI(machinecontroller)
-gui.drawer.init_pen('simmove', 400)
-
-machinecontroller.set_gui(gui)
-
-# set start position
-machinecontroller.virtualmachine.position[0] = 1
-machinecontroller.virtualmachine.position[1] = 1
-#For some reason setting this also changes the local computer movetable!!! Why???
-machinecontroller.virtualmachine.position[2] = 0.002
-""")
+        self._write_vmc("moves = []")
         self._write_vmc("traversespeed = " + str(self.traversespeed))
         self._write_vmc("retractspeed = " + str(self.retractspeed))
         
@@ -186,7 +173,7 @@ machinecontroller.virtualmachine.position[2] = 0.002
                     self._make_move(currentx*self.rmlunits, currenty*self.rmlunits, self.z_up, self.traversespeed)
                     self.penposition = "up"
 
-        self._write_vmc("machinecontroller.mill_moves()")
+        self._write_vmc("run_app(moves)")
         return self.moves 
 
 if __name__ == "__main__":

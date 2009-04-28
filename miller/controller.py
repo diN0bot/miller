@@ -14,6 +14,7 @@ Information Flow:
 #------------IMPORTS-----------------------------------------------------------
 
 import sys, os
+import threading
 import commands
 import csv
 import numpy
@@ -21,19 +22,11 @@ import numpy
 import time
 import math
 import serial
-import pygame
-
-from GUI import GUI
-from parsers import RMLParser
 
 import default_settings as settings
+from miller.eventqueue import EventQueue
 
 #-----------OBJECTS------------------------------------------------------------
-
-def GCD(a, b):
-    while b != 0:
-        (a, b) = (b, a%b)
-    return a
 
 class MotorController(object):
     """
@@ -75,7 +68,6 @@ class Machine(object):
     """
     
     """
-    
     def __init__(self):
         """
         Initializes machine instance state.
@@ -122,10 +114,35 @@ class Machine(object):
         for i in range(self.numberofaxes):
             returnmove=returnmove + self.guides[i].move(commandmove[i])
         return returnmove
-            
+
+class Move(object):
+    """
+    Simple data structure for storing move information.
+    This is the interface between the parsers and the machine controller code.
+    Because both modules depend on this class, it lives here outside of import loops.
+    
+    NOTE: If, in a later iteration, it makes sense to have a different kind of move,
+    and thus a different kind of machinecontroller.execute_move, then the execute_move
+    abstraction should be attached to each move object. Since only the machinecontroller
+    actually knows how to execute moves, that means the Move abstraction should be 
+    owned by machinecontroller.
+    
+    That is, a machine controller instance should be able to store different kinds of moves
+    that get executed differently.
+    """
+
+    def __init__(self, x = None, y = None, z = None, rate = 1):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.rate = rate
+    
+    def __unicode__(self):
+        return "x=%s, y=%s, z=%s at %s" % (self.x, self.y, self.z, self.rate)
 
 class Controller(object):
     """
+    this space intentionally left blank
     """
     
     def __init__(self, portnumber):
@@ -139,21 +156,55 @@ class Controller(object):
         #in seconds
         self.sertimeout = None
         
-        self.moves = []
-        # index matches move that will be executed next
-        self.moves_index = 0
-        
         self.virtualmachine = Machine()
-        
         self.gui = None
+        
+        self.board = EventQueue(self._finished_milling_board_callback)
+        self.one_offs = EventQueue()
+        
+        self.board.pause()
+        self.one_offs.go()
+        
+        self.board.setName("Board Queue Thread")
+        self.one_offs.setName("One Offs Thread")
+        
+        # jogging move parameters
+        self.PEN_STATES = {'up':'up', 'down':'down', 'cut':'cut'}
+        self.pen_state = self.PEN_STATES['up']
+        self.pen_up_z = 0.05
+        self.pen_down_z = -0.005
+        self.pen_cut_z = -0.010 # ??
+        self.move_amount = 0.1
+        self.traverse_speed = 8.0
+        self.retract_speed = 8.0
+        self.cutting_speed = 4.0
+        self.plunge_speed = 4.0
+        
+        # start event queues
+        self.board.start()
+        self.one_offs.start()
+    
+    def _finished_milling_board_callback(self):
+        self.board.pause()
+        self.one_offs.go()
+
+    def is_pen_up(self): return self.pen_state == self.PEN_STATES['up']
+    def is_pen_down(self): return self.pen_state == self.PEN_STATES['down']
+    def is_pen_cutting(self): return self.pen_state == self.PEN_STATES['cut']
     
     def set_gui(self, gui):
         """
+        Set self's gui field. This should be part of the constructor, but because GUI's constructor
+        also takes a Controller, we need a set_gui method to resolve the catch-22.
         
+        If set_gui is never called, that's ok. There will simply be no gui.
+        If set_gui is called twice, self.gui is overwritten
+        
+        @param gui: a GUI instance 
         """
         self.gui = gui
     
-    def movegen(self, moveto):
+    def _movegen(self, moveto):
         """
         @param moveto: 
         @return: delta
@@ -172,7 +223,12 @@ class Controller(object):
                 
         return delta
 
-    def stepgen(self, traverse, rate):
+    def _GCD(self, a, b):
+        while b != 0:
+            (a, b) = (b, a%b)
+        return a
+
+    def _stepgen(self, traverse, rate):
         """
         @param traverse: 
         @param rate: in in/min
@@ -223,7 +279,7 @@ class Controller(object):
             nomove = 0
             
             if len(movingsteps) == 2:
-                gcd = GCD(absmovingsteps[0], absmovingsteps[1])
+                gcd = self._GCD(absmovingsteps[0], absmovingsteps[1])
                 gcd_movingsteps = absmovingsteps / gcd
                 
                 # flip gcd_movingsteps
@@ -273,15 +329,14 @@ class Controller(object):
                 self.virtualmachine.motorcontrollers[i].direction = directions2[i]
         else:
             nomove = 1
-            for i in range(virtualmachine.numberofaxes):
+            for i in range(self.virtualmachine.numberofaxes):
                     self.virtualmachine.motorcontrollers[i].hardwarecounter = 0
                     self.virtualmachine.motorcontrollers[i].softwarecounter = 0
                     self.virtualmachine.motorcontrollers[i].duration = 0
                     self.virtualmachine.motorcontrollers[i].direction = 0
             return nomove
-        
 
-    def xmit(self):
+    def _xmit(self):
         """
         Constructs and sends packet over serial port
         
@@ -346,8 +401,7 @@ class Controller(object):
             
         return outgoing
 
-
-    def simmove(self, outgoing):
+    def _simmove(self, outgoing):
         """
         @param outgoing: packet sent over serial port
         @return: [delta, rate, movetime]
@@ -398,23 +452,80 @@ class Controller(object):
 
         return [delta, rate, movetime]
     
-    def add_moves(self, moves):
+    def set_board(self, moves):
         """
-        @param moves: single Move instance or list, tuple of Move objects 
+        Sets board's move queue to the specified moves. Will overwrite any
+        moves currently in queue. Use mill_board() to start milling..
         """
-        if isinstance(moves, (list, tuple)):
-            self.moves += moves
-        else:
-            self.moves.append(moves)
+        self.board.reset()
+        for move in moves:
+            self.board.add(self.move, move.x, move.y, move.z, move.rate)
     
-    def mill_moves(self):
-        for move in self.moves:
-            self.mill_move(move.x, move.y, move.z, move.rate)
-            self.moves_index += 1
+    def reset_board(self):
+        """
+        Returns spindle and move queue to initial state.
+        """
+        self.board.reset()
     
-    def mill_move(self, x = None, y = None, z = None, rate = 1):
+    def mill_board(self):
         """
+        Continue milling moves in move queue.
         """
+        self.board.go()
+    
+    def pause_board(self):
+        """
+        Stop milling moves in move queue. Resume will mill_board()
+        """
+        self.board.pause()
+        
+    def exit(self):
+        """
+        Exit EventQueue threads
+        """
+        self.board.exit()
+        self.one_offs.exit()
+    
+    def jog_left(self):
+        rate = self.is_pen_up() and self.traverse_speed or self.cutting_speed
+        x = self.virtualmachine.position[0] - self.move_amount
+        self.one_offs.add(self.move, x=x, rate=rate)
+        
+    def jog_right(self):
+        rate = self.is_pen_up() and self.traverse_speed or self.cutting_speed
+        x = self.virtualmachine.position[0] + self.move_amount
+        self.one_offs.add(self.move, x=x, rate=rate)
+    
+    def jog_away(self):
+        rate = self.is_pen_up() and self.traverse_speed or self.cutting_speed
+        y = self.virtualmachine.position[1] - self.move_amount
+        self.one_offs.add(self.move, y=y, rate=rate)
+    
+    def jog_toward(self):
+        rate = self.is_pen_up() and self.traverse_speed or self.cutting_speed
+        y = self.virtualmachine.position[1] + self.move_amount
+        self.one_offs.add(self.move, y=y, rate=rate)
+    
+    def pen_up(self):
+        if not self.is_pen_up():
+            self.one_offs.add(self.move, z = self.pen_up_z, rate=self.retract_speed)
+    
+    def pen_down(self):
+        if not self.is_pen_down():
+            self.one_offs.add(self.move, z = self.pen_down_z, rate=self.plunge_speed)
+    
+    def pen_cut(self):
+        if not self.is_pen_cutting():
+            self.one_offs.add(self.move, z = self.pen_cut_z, rate=self.plunge_speed)
+    
+    def move(self, x = None, y = None, z = None, rate = 1):
+        """
+        @invariant: z should match one of self.pen_FOO_z
+        @invariant: rate should match one of self.FOO_speed
+        """
+        if z == self.pen_up_z: self.pen_state = self.PEN_STATES['up']
+        if z == self.pen_down_z: self.pen_state = self.PEN_STATES['down']
+        if z == self.pen_cut_z: self.pen_state = self.PEN_STATES['cut']
         
         if x == None: x = self.virtualmachine.position[0]
         if y == None: y = self.virtualmachine.position[1]
@@ -424,18 +535,18 @@ class Controller(object):
         feedspeed = rate
         
         if settings.LOG: print "commandedposition: ", moveto
-        delta = self.movegen(moveto)
+        delta = self._movegen(moveto)
         if self.gui:
             if moveto[2] > 0:
                 self.gui.drawer.pen_down('simmove')
             else:
                 self.gui.drawer.pen_up('simmove')
-        nomove = self.stepgen(delta, feedspeed)
+        nomove = self._stepgen(delta, feedspeed)
         # how much to pause for loop when not in USE_SERIAL
         sleep_amt = 0
         if nomove != 1:
-            outgoing = self.xmit()
-            [delta, rate, movetime] = self.simmove(outgoing)
+            outgoing = self._xmit()
+            [delta, rate, movetime] = self._simmove(outgoing)
             if settings.LOG: print "SIMMOVE MOVETIME", movetime
             if self.gui:
                 sleep_amt = self.gui.drawer.goto(delta[0], delta[1], 'simmove', rate=rate, movetime=movetime)
@@ -449,52 +560,8 @@ class Controller(object):
         if settings.LOG: print "machine position: " , self.virtualmachine.position
         if settings.LOG: print ""
         
-        if self.gui:
-            self.gui.check_events()
-                    
         if not settings.USE_SERIAL and self.gui:
             # pause to mimic line drawing
             time.sleep(sleep_amt)
             # wait for space bar
             #gui.drawer.pause_for_space()
-
-def run_app(moves):
-    
-    machinecontroller = Controller(settings.SERIAL_PORT)
-    machinecontroller.add_moves(moves)
-    
-    gui = GUI(machinecontroller)
-    gui.drawer.init_pen('simmove', 400)
-    
-    machinecontroller.set_gui(gui)
-
-    # set start position
-    machinecontroller.virtualmachine.position[0] = 1
-    machinecontroller.virtualmachine.position[1] = 1
-    #For some reason setting this also changes the local computer movetable!!! Why???
-    machinecontroller.virtualmachine.position[2] = 0.002
-    
-    # mill board!
-    machinecontroller.mill_moves()
-    
-    print "\nFINISHED BOARD!"
-
-    # don't end program until press ESCAPE key
-    while True: 
-        gui.check_events()
-        time.sleep(0.2)
-
-
-if __name__ == "__main__":
-    """ This is the main loop that gets executed when running this file
-        from the command line """
-    
-    if len(sys.argv) > 0:
-        rmlfile = sys.argv[1]
-    else:
-        print "Program takes 1 required argument: name of RML file"
-        sys.exit(1)
-        
-    moves = RMLParser().parse_rml(rmlfile)
-    
-    run_app(moves)

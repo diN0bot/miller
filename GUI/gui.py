@@ -9,7 +9,9 @@ Drawer is in a separate file and is instantiated externally to GUI. Eventually w
 to refactor this: put ControlPanel in it's own file; GUI contains Drawer.
 """
 import sys
+import threading
 import math
+import time
 import pygame
 from gui_commands import *
 from drawer import Drawer
@@ -23,13 +25,13 @@ class GUI(object):
     
     ControlPanel is manipulated directly by the GUI.
     """
-    
-    def __init__(self, machine):
+
+    def __init__(self, controller):
         """
         Initializes pygame window,
         including the drawing space and control panel
         """
-        self.machine = machine
+        self.controller = controller
         
         pygame.init() 
         pygame.display.set_caption("Desktop CNC Miller")
@@ -45,32 +47,36 @@ class GUI(object):
         self.drawer_bounds = pygame.Rect(0, 0, midpnt, self.max_y)
         self.control_panel_bounds = pygame.Rect(midpnt, 0, self.max_x-midpnt, self.max_y)
         
-        self.control_panel = ControlPanel(self.window, self.control_panel_bounds)
+        self.control_panel = ControlPanel(self.window, self.control_panel_bounds, self.controller)
         self.drawer = Drawer(self.window)
         
         self.control_panel.draw()
-        
+
     def check_events(self):
         """
-        pygame window loop. check if ESCAPE key is pressed to close window and exit program
+        Pygame window event and redraw loop:
+            Check if ESCAPE key is pressed to close window and exit program
+        Call children check_events
         """
         for event in pygame.event.get():
+            self._check_event(event)
             self.control_panel.check_event(event)
-            
-            # press ESCAPE to exit
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE: 
-                    sys.exit(0)
         pygame.display.flip()
+        time.sleep(0.1)
 
-
+    def _check_event(self, event):
+        # press ESCAPE to exit
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE: 
+                self.controller.exit()
+                sys.exit(0)
 
 class ControlPanel(object):
     """
     Keeps track of panel buttons and state.
     Redraws the whole panel whenever there is user interaction.
     """
-    def __init__(self, window, bounds):
+    def __init__(self, window, bounds, controller):
         self.window = window
         
         self.border_color = (255, 255, 0)
@@ -91,17 +97,18 @@ class ControlPanel(object):
         board_tab = self.tabbed_pane.add_pane("Position Board") 
         
         # x_offset and y_offset are button position relative to the x,y of tabbed_pane_bounds
-        buttons = [{'text': 'Left', 'x_offset': 60, 'y_offset': 65, 'command': LeftCommand('y')},
-                   {'text': 'Toward', 'x_offset': 130, 'y_offset': 45, 'command': LeftCommand('y')},
-                   {'text': 'Away', 'x_offset': 130, 'y_offset': 85, 'command': LeftCommand('y')},
-                   {'text': 'Right', 'x_offset': 200, 'y_offset': 65, 'command': LeftCommand('y')},
+        buttons = [{'text': 'Left', 'x_offset': 60, 'y_offset': 65, 'command': LeftCommand(controller)},
+                   {'text': 'Toward', 'x_offset': 130, 'y_offset': 85, 'command': TowardCommand(controller)},
+                   {'text': 'Away', 'x_offset': 130, 'y_offset': 45, 'command': AwayCommand(controller)},
+                   {'text': 'Right', 'x_offset': 200, 'y_offset': 65, 'command': RightCommand(controller)},
                    
-                   {'text': 'Up', 'x_offset': 320, 'y_offset': 65, 'command': LeftCommand('y')},
-                   {'text': 'Down', 'x_offset': 375, 'y_offset': 65, 'command': LeftCommand('y')},
+                   {'text': 'Up', 'x_offset': 320, 'y_offset': 65, 'command': UpCommand(controller)},
+                   {'text': 'Down', 'x_offset': 375, 'y_offset': 65, 'command': DownCommand(controller)},
+                   # cut {'text': 'Down', 'x_offset': 375, 'y_offset': 65, 'command': DownCommand(self.controller)},
                    
-                   {'text': 'Auto Jog To Zero', 'x_offset': 200, 'y_offset': 200, 'command': LeftCommand('y')},
+                   {'text': 'Auto Jog To Zero', 'x_offset': 200, 'y_offset': 200, 'command': LeftCommand(controller)},
                    
-                   {'text': 'Reset Zero', 'x_offset': 200, 'y_offset': 300, 'command': LeftCommand('y')},
+                   {'text': 'Reset Zero', 'x_offset': 200, 'y_offset': 300, 'command': LeftCommand(controller)},
                   ]
         self.labels = []
         labels = [{'text': 'Jog Board', 'x_offset': 130, 'y_offset': 20},
