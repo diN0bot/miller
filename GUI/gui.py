@@ -125,9 +125,9 @@ class ControlPanel(object):
         mill_tab = self.tabbed_pane.add_pane("Mill Board") 
         
         # x_offset and y_offset are button position relative to the x,y of tabbed_pane_bounds
-        buttons = [{'text': 'Go', 'x_offset': 60, 'y_offset': 65, 'command': LeftCommand('y')},
-                   {'text': 'Pause', 'x_offset': 130, 'y_offset': 45, 'command': LeftCommand('y')},
-                   {'text': 'Reset', 'x_offset': 130, 'y_offset': 85, 'command': LeftCommand('y')},
+        buttons = [{'text': 'Go', 'x_offset': 60, 'y_offset': 65, 'command': GoCommand(controller)},
+                   {'text': 'Pause', 'x_offset': 130, 'y_offset': 45, 'command': PauseCommand(controller)},
+                   {'text': 'Reset', 'x_offset': 130, 'y_offset': 85, 'command': ResetCommand(controller)},
                   ]
         self.labels = []
         labels = [{'text': 'Jog Board', 'x_offset': 130, 'y_offset': 20},

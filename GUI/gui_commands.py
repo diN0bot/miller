@@ -9,66 +9,52 @@ import pygame
 
 #-----------Machine Commands---------------------------------------------------
 
-class LeftCommand(object):
-    """ job board left """
+class ControllerCommand(object):
+    """ base class for commands on controller """
     
     def __init__(self, controller):
         self.controller = controller
         
+    def do(self):
+        pass
+        
+class LeftCommand(ControllerCommand):
     def do(self):
         self.controller.jog_left()
 
-class RightCommand(object):
-    """ job board right """
-    
-    def __init__(self, controller):
-        self.controller = controller
-        
+class RightCommand(ControllerCommand):
     def do(self):
         self.controller.jog_right()
         
-class TowardCommand(object):
-    """ job board toward """
-    
-    def __init__(self, controller):
-        self.controller = controller
-        
+class TowardCommand(ControllerCommand):
     def do(self):
         self.controller.jog_toward()
         
-class AwayCommand(object):
-    """ job board away """
-    
-    def __init__(self, controller):
-        self.controller = controller
-        
+class AwayCommand(ControllerCommand):
     def do(self):
         self.controller.jog_away()
         
-class UpCommand(object):
-    """ set pen up """
-    
-    def __init__(self, controller):
-        self.controller = controller
-        
+class GoCommand(ControllerCommand):
+    def do(self):
+        self.controller.mill_board()
+
+class PauseCommand(ControllerCommand):
+    def do(self):
+        self.controller.pause_board()
+
+class ResetCommand(ControllerCommand):
+    def do(self):
+        self.controller.reset_board()
+
+class UpCommand(ControllerCommand):
     def do(self):
         self.controller.pen_up()
 
-class DownCommand(object):
-    """ set pen down """
-    
-    def __init__(self, controller):
-        self.controller = controller
-        
+class DownCommand(ControllerCommand):
     def do(self):
         self.controller.jog_down()
 
-class CutCommand(object):
-    """ set pen cut """
-    
-    def __init__(self, controller):
-        self.controller = controller
-        
+class CutCommand(ControllerCommand):
     def do(self):
         self.controller.pen_cut()
 

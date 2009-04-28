@@ -29,10 +29,31 @@
 ==== RUN FROM COMMAND LINE ====
 
 milly.py contains the main entry point for the complete app, including a
-GUI that allows one to select input board files from the input_files directory.
+GUI that allows one to select input board files from the input_files directory (todo).
 
 If one provides a file as an argument to miller.py, it will be automatically milled.
 
     python miller.py input_files/test.rml
 
 Press ESCAPE to quit
+
+One can also parse rml files and run generated Virtual Machine Controller (VMC) files
+separately. VMC filenames match the rml filenames from which they were generated; instead
+of .rml they are .py
+
+	python parsers/rmlparser.py input_files/test.rml
+	python input_files/test.py
+	
+To generate all VMC files from all .rml files in the input_files directory run the
+generate_all_vmc.sh bash script:
+
+	./generate_all_vmc.sh
+
+==== DOCUMENTATION ====
+
+The python code is reasonably documented inline.
+
+An overview of the system architecture is in the docs directory.
+
+Machine characterizations are in the characterization directory.
+

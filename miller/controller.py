@@ -118,8 +118,12 @@ class Machine(object):
 class Move(object):
     """
     Simple data structure for storing move information.
+    
     This is the interface between the parsers and the machine controller code.
     Because both modules depend on this class, it lives here outside of import loops.
+    
+    NOTE: Controller assumes Move objects depict global positions and rate, not
+    changes in positions or rate.
     
     NOTE: If, in a later iteration, it makes sense to have a different kind of move,
     and thus a different kind of machinecontroller.execute_move, then the execute_move
@@ -338,7 +342,13 @@ class Controller(object):
 
     def _xmit(self):
         """
-        Constructs and sends packet over serial port
+        Constructs and sends packet over serial port.
+        
+        Packet contains instructions for different speeds for each of the 
+        three motors, as well as a single instruction duration.
+        
+        Blocking on receiving acknowledge. @TODO implement time_out with x retries
+        before raising an exception.
         
         packet format:
             byte0 - Start Byte
